@@ -1,0 +1,9 @@
+<?php
+declare(strict_types=1);
+set_time_limit(0);
+require_once __DIR__ . '/../../includes/functions.php';
+if (PHP_SAPI !== 'cli') { require_once __DIR__ . '/../../includes/auth.php'; require_login(['super_admin','admin']); }
+function import_log(string $message): void { $file=__DIR__ . '/../../storage/logs/import-' . date('Ymd') . '.log'; file_put_contents($file, '['.date('H:i:s').'] '.$message.PHP_EOL, FILE_APPEND); echo e($message) . "<br>\n"; @ob_flush(); flush(); }
+function read_json_records(string $file): Generator { if(!is_file($file)) return; $fh=fopen($file,'r'); $first=trim((string)fgets($fh)); rewind($fh); if(str_starts_with($first,'[')){ $data=json_decode_safe(file_get_contents($file),[]); foreach($data as $row) yield $row; } else { while(($line=fgets($fh))!==false){ $row=json_decode_safe($line,null); if(is_array($row)) yield $row; } } fclose($fh); }
+function batch_insert(string $table, array $rows, array $columns): array { $imported=$skipped=$errors=0; foreach(array_chunk($rows,200) as $chunk){ foreach($chunk as $row){ try{ $vals=[]; foreach($columns as $c) $vals[]=$row[$c] ?? null; $ph=implode(',',array_fill(0,count($columns),'?')); db_execute('INSERT IGNORE INTO '.$table.' ('.implode(',',$columns).') VALUES ('.$ph.')',$vals); $imported++; }catch(Throwable $e){ $errors++; import_log('Error '.$table.': '.$e->getMessage()); } } } return compact('imported','skipped','errors'); }
+function import_file(string $file, string $table, array $map): array { $path=__DIR__.'/../../storage/imports/'.$file; $rows=[]; foreach(read_json_records($path) as $r){ $row=[]; foreach($map as $col=>$key){ $row[$col]=$r[$key] ?? ($key==='created_at'?'now()':null); } if(isset($row['created_at']) && $row['created_at']==='now()') $row['created_at']=date('Y-m-d H:i:s'); $rows[]=$row; } $res=batch_insert($table,$rows,array_keys($map)); import_log("$table: imported {$res['imported']}, skipped {$res['skipped']}, errors {$res['errors']}"); return $res; }

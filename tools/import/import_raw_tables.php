@@ -1,0 +1,1 @@
+<?php require_once __DIR__ . '/import_lib.php'; echo '<h1>import_raw_tables.php</h1>'; import_log('Raw table importer is ready for custom SQL-ready OOREP/OpenHomeopath files. Place files in storage/imports and extend this mapper if your dataset uses non-standard column names.');
